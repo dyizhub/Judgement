@@ -35,8 +35,6 @@
   "devDependencies": {
     "@types/react": "~19.2.2",
     "cross-env": "^10.1.0",
-    "eas-cli": "^21.2.0",
-    "sharp": "^0.35.3",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -47,9 +45,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "icons": "node scripts/make-icons.js",
-    "login": "eas login",
-    "build:ios": "cross-env EAS_NO_VCS=1 eas build --platform ios --profile production",
-    "submit:ios": "eas submit --platform ios --latest"
+    "login": "npx --yes eas-cli login",
+    "build:ios": "cross-env EAS_NO_VCS=1 npx --yes eas-cli build --platform ios --profile production",
+    "submit:ios": "npx --yes eas-cli submit --platform ios --latest"
   },
   "private": true
 }

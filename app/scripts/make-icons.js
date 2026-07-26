@@ -1,7 +1,12 @@
 // Generates the app's launcher/splash artwork from vector definitions so the
 // icon set can be regenerated at any size without binary assets in the repo.
 //
-//   node scripts/make-icons.js
+//   npm i -D sharp && npm run icons
+//
+// sharp is deliberately NOT a saved devDependency: EAS installs devDependencies
+// on the build server, and sharp ships platform-specific binaries that would
+// break a macOS build resolved from a Windows lockfile. Install it only when
+// regenerating icons, then drop it again.
 //
 // Suits are drawn as paths rather than text: SVG rasterisers can't be relied on
 // to have a font with the suit glyphs.

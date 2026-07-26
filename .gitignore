@@ -16,3 +16,6 @@ run-server-hidden.vbs
 
 # Fly
 .fly/
+
+# Expo dev server logs
+app/*.log

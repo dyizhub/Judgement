@@ -1,0 +1,20 @@
+# Used when EAS_NO_VCS=1 archives this directory instead of cloning git.
+# (Git can't clone a file:// URL whose path contains an apostrophe, which this
+# project's path does.)
+node_modules/
+.expo/
+dist/
+web-build/
+.kotlin/
+ios/
+android/
+
+# Local dev noise
+*.log
+expo-dev.log
+expo-web.log
+.vscode/
+.claude/
+
+# Not needed to build the app
+scripts/

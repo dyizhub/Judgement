@@ -1,0 +1,16 @@
+node_modules
+npm-debug.log
+app
+APP_PLAN.md
+README.md
+server.log
+run-server-loop.bat
+run-server-hidden.vbs
+.claude
+.git
+.gitignore
+Dockerfile
+.dockerignore
+render.yaml
+public/style-old-backup.css
+public/style-pre-redesign-backup.css

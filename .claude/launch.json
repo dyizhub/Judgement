@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "judgement",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server.js"],
+      "cwd": "E:\\Adi's Stash\\Claude Work\\judgement",
+      "port": 3000
+    }
+  ]
+}

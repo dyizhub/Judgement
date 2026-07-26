@@ -1,0 +1,18 @@
+# Render Blueprint for the Judgement game server.
+# Free plan: the service sleeps after ~15 min with no traffic and wakes on the
+# next request from anyone (~30-60s cold start). Nothing is lost by sleeping —
+# the server already drops a room once its last human disconnects.
+#
+# Uses the Dockerfile so the deployed runtime matches what was tested locally.
+# Render injects PORT; server.js already honours it.
+services:
+  - type: web
+    name: judgement
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+    # ENABLE_DEV_MODE is deliberately NOT set — dev mode stays off in production.

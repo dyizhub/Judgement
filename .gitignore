@@ -1,0 +1,18 @@
+node_modules/
+npm-debug.log*
+server.log
+.DS_Store
+
+# Expo app
+app/node_modules/
+app/.expo/
+app/dist/
+app/expo-web.log
+app/expo-dev.log
+
+# Local-only launcher
+run-server-loop.bat
+run-server-hidden.vbs
+
+# Fly
+.fly/

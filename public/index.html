@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Judgement</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ========== SCREEN 1: HOME ========== -->
+  <div id="screen-home">
+    <div class="panel home-panel">
+      <h1 class="game-title">Judgement</h1>
+      <p class="game-subtitle">The classic trick-taking card game</p>
+
+      <div class="field">
+        <input id="input-name" maxlength="16" placeholder="Your name" autocomplete="off">
+      </div>
+
+      <button id="btn-create" class="btn btn-primary">Create Room</button>
+
+      <div class="divider"><span>or</span></div>
+
+      <div class="field field-code">
+        <input id="input-code" maxlength="4" placeholder="Room code" autocomplete="off">
+      </div>
+
+      <button id="btn-join" class="btn btn-secondary">Join Room</button>
+
+      <div id="home-error" class="error-text"></div>
+      <div id="conn-status" class="conn-status hidden"></div>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN 2: LOBBY ========== -->
+  <div id="screen-lobby" class="hidden">
+    <div class="panel lobby-panel">
+      <h2 class="lobby-heading">Room <span id="lobby-code"></span></h2>
+
+      <div id="lobby-players" class="lobby-players"></div>
+
+      <div id="bot-controls" class="hidden">
+        <select id="bot-difficulty">
+          <option value="1">Easy</option>
+          <option value="2" selected>Medium</option>
+          <option value="3">Hard</option>
+          <option value="4">Expert</option>
+        </select>
+        <button id="btn-add-bot" class="btn btn-secondary">Add Bot</button>
+      </div>
+
+      <div id="lobby-hint" class="lobby-hint"></div>
+
+      <button id="btn-start" class="btn btn-primary">Start Game</button>
+
+      <div id="lobby-error" class="error-text"></div>
+    </div>
+  </div>
+
+  <!-- ========== SCREEN 3: GAME ========== -->
+  <div id="screen-game" class="hidden">
+
+    <div id="game-topbar">
+      <span id="round-label" class="topbar-item topbar-left"></span>
+      <span id="trump-label" class="topbar-item topbar-center"></span>
+      <button id="btn-scores" class="btn btn-subtle topbar-item topbar-right">Scores</button>
+    </div>
+
+    <div id="table-area">
+      <div id="trick-area"></div>
+      <div id="trick-banner" class="hidden"></div>
+    </div>
+
+    <div id="my-area">
+      <div id="my-info">
+        <span id="my-name"></span>
+        <span id="my-bidinfo"></span>
+        <span id="my-turn" class="hidden">Your turn</span>
+      </div>
+      <div id="my-hand"></div>
+    </div>
+
+    <!-- Bid overlay -->
+    <div id="bid-overlay" class="overlay hidden">
+      <div class="overlay-panel">
+        <h3>Your bid</h3>
+        <div id="bid-trump"></div>
+        <span id="bid-hint" class="overlay-hint"></span>
+        <div id="bid-buttons"></div>
+      </div>
+    </div>
+
+    <!-- Scoreboard overlay -->
+    <div id="score-overlay" class="overlay hidden">
+      <div class="overlay-panel score-panel">
+        <h3><span id="score-title">Scoreboard</span></h3>
+        <div class="score-table-wrap">
+          <table id="score-table"></table>
+        </div>
+        <div id="score-actions">
+          <button id="btn-next-round" class="btn btn-primary hidden">Next Round</button>
+          <button id="btn-play-again" class="btn btn-primary hidden">Play Again</button>
+          <button id="btn-close-scores" class="btn btn-secondary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="hidden"></div>
+
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>

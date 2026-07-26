@@ -8,9 +8,12 @@
     "scheme": "judgement",
     "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon",
       "supportsTablet": true,
-      "bundleIdentifier": "com.advaydhasmana.judgement"
+      "bundleIdentifier": "com.advaydhasmana.judgement",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.advaydhasmana.judgement",

@@ -8,7 +8,7 @@
     "scheme": "judgement",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.advaydhasmana.judgement",
       "buildNumber": "1",
       "infoPlist": {

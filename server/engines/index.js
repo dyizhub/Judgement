@@ -16,9 +16,11 @@
 // never touch sockets, so an engine can be driven entirely from a test.
 
 const judgement = require('./judgement');
+const callbreak = require('./callbreak');
 
 const ENGINES = {
   [judgement.meta.id]: judgement,
+  [callbreak.meta.id]: callbreak,
 };
 
 function getEngine(gameId) {

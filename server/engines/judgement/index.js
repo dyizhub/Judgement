@@ -11,7 +11,7 @@
 const crypto = require('crypto');
 const { makeDeck, shuffle, cardEq, sortHand, weightedDrawSuitBiased } = require('../../core/deck');
 const { SUIT_NAMES } = require('../../core/deck');
-const { botBid, botPlay } = require('./bots');
+const { botBid, botPlay, botName } = require('./bots');
 
 const TRUMP_BY_ROUND = ['H', 'C', 'S', 'D', null, null, 'D', 'S', 'C', 'H'];
 const TOTAL_ROUNDS = 10;
@@ -332,6 +332,7 @@ module.exports = {
   pendingHostAction,
   autoAction,
   botAction,
+  botName,
   justResolvedTrick,
   isFinished,
   results,

@@ -283,10 +283,9 @@ function handleMessage(ws, msg) {
     if (room.players.length >= engine.meta.maxPlayers)
       return send(ws, 'error', { message: `Room is full (${engine.meta.maxPlayers} max).` });
     const difficulty = [1, 2, 3, 4].includes(msg.difficulty) ? msg.difficulty : 2;
-    const { botName } = require('./engines/judgement/bots');
     room.players.push({
       id: crypto.randomUUID(),
-      name: botName(difficulty, room.players.map(p => p.name)),
+      name: engine.botName(difficulty, room.players.map(p => p.name)),
       ws: null,
       connected: true,
       isBot: true,

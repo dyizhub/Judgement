@@ -1,4 +1,4 @@
-# Judgement game server — small production image.
+# Veyla Cards server — small production image.
 FROM node:24-alpine
 
 ENV NODE_ENV=production
@@ -8,9 +8,9 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-# Server + bot AI + the web client it serves.
-COPY server.js bots.js ./
+# Server core + game engines, and the web client it serves.
+COPY server ./server
 COPY public ./public
 
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "server/index.js"]

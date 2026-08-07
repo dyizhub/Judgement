@@ -93,6 +93,10 @@ function stateFor(room, player) {
     })),
     minPlayers: engine ? engine.meta.minPlayers : 2,
     maxPlayers: engine ? engine.meta.maxPlayers : 8,
+    // Time left before the server acts for whoever is on turn. Sent as a
+    // duration, not a timestamp, so a client with a skewed clock still counts
+    // down correctly.
+    autoMoveInMs: room.turnDeadline ? Math.max(0, room.turnDeadline - Date.now()) : null,
   };
 
   // In the lobby there is no engine state yet. Engines supply an idle view with
@@ -106,22 +110,39 @@ function stateFor(room, player) {
 
 function broadcastState(room) {
   room.lastActivity = Date.now();
-  for (const p of room.players) if (!p.isBot) send(p.ws, 'state', { state: stateFor(room, p) });
+  // Timers first: scheduleTurnTimeout sets room.turnDeadline, which the state
+  // carries so clients can show a countdown. Sending first would ship the
+  // previous turn's deadline.
   scheduleBot(room);
   scheduleTurnTimeout(room);
+  for (const p of room.players) if (!p.isBot) send(p.ws, 'state', { state: stateFor(room, p) });
 }
 
 // ---------- timers ----------
 // A game must never freeze because someone closed their phone. Present players
 // get a courteous window; vanished ones get a short grace to reconnect.
 
-const TURN_TIMEOUT_CONNECTED_MS = Number(process.env.TURN_TIMEOUT_CONNECTED_MS) || 90 * 1000;
-const TURN_TIMEOUT_DISCONNECTED_MS = Number(process.env.TURN_TIMEOUT_DISCONNECTED_MS) || 12 * 1000;
-const HOST_TIMEOUT_CONNECTED_MS = Number(process.env.ROUNDEND_TIMEOUT_CONNECTED_MS) || 120 * 1000;
-const HOST_TIMEOUT_DISCONNECTED_MS = Number(process.env.ROUNDEND_TIMEOUT_DISCONNECTED_MS) || 15 * 1000;
+// No default is ever shorter than this: a shorter grace gives someone who
+// dropped for a moment no realistic chance to get back before their turn is
+// played for them. An explicitly-set env var is taken literally so tests can
+// run timeouts in milliseconds.
+const MIN_TIMEOUT_MS = 30 * 1000;
+
+function timeoutMs(envName, defaultMs) {
+  const raw = Number(process.env[envName]);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return Math.max(MIN_TIMEOUT_MS, defaultMs);
+}
+
+const TURN_TIMEOUT_CONNECTED_MS = timeoutMs('TURN_TIMEOUT_CONNECTED_MS', 90 * 1000);
+const TURN_TIMEOUT_DISCONNECTED_MS = timeoutMs('TURN_TIMEOUT_DISCONNECTED_MS', 30 * 1000);
+const HOST_TIMEOUT_CONNECTED_MS = timeoutMs('ROUNDEND_TIMEOUT_CONNECTED_MS', 120 * 1000);
+const HOST_TIMEOUT_DISCONNECTED_MS = timeoutMs('ROUNDEND_TIMEOUT_DISCONNECTED_MS', 30 * 1000);
 
 function scheduleTurnTimeout(room) {
   if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  // Deadline the clients count down against; null whenever nothing is pending.
+  room.turnDeadline = null;
   if (process.env.NO_TURN_TIMEOUT) return;
   if (room.status !== 'playing' || !room.game) return;
   const engine = getEngine(room.gameId);
@@ -131,6 +152,7 @@ function scheduleTurnTimeout(room) {
   if (hostAction) {
     const host = room.players.find(p => p.id === room.hostId);
     const delay = host && host.connected ? HOST_TIMEOUT_CONNECTED_MS : HOST_TIMEOUT_DISCONNECTED_MS;
+    room.turnDeadline = Date.now() + delay;
     room.turnTimer = setTimeout(() => {
       room.turnTimer = null;
       if (!room.game || !engine.pendingHostAction(room.game)) return;
@@ -146,6 +168,7 @@ function scheduleTurnTimeout(room) {
   if (!p || p.isBot) return; // bots are driven by scheduleBot
 
   const delay = p.connected ? TURN_TIMEOUT_CONNECTED_MS : TURN_TIMEOUT_DISCONNECTED_MS;
+  room.turnDeadline = Date.now() + delay;
   room.turnTimer = setTimeout(() => {
     room.turnTimer = null;
     if (!room.game || engine.currentActor(room.game) !== idx) return;

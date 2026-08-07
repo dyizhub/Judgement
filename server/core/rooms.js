@@ -27,6 +27,7 @@ function createRoom(gameId) {
     game: null, // engine state once started
     botTimer: null,
     turnTimer: null,
+    turnDeadline: null, // when the server will act for the current player
     lastActivity: Date.now(),
   };
   rooms.set(room.code, room);

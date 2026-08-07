@@ -61,6 +61,56 @@ function legalPlays(hand, trick) {
   return follow.length ? follow : hand;
 }
 
+// ---------- handing the bid back ----------
+// Bidding goes round in order, so the seat immediately before you is the one
+// who just bid. If they called something they regret, the player on turn can
+// hand the turn back so they can re-bid.
+
+function previousBidderIdx(gs, ctx, idx) {
+  const n = ctx.players.length;
+  const firstBidder = (gs.dealerIdx + 1) % n;
+  if (idx === firstBidder) return null; // nobody has bid before you this round
+  return (idx - 1 + n) % n;
+}
+
+// Why the player on turn may or may not send the bid back. Published in the
+// view so the client can render (or explain) the button without duplicating
+// the rules.
+function passBackInfo(gs, ctx) {
+  if (gs.phase !== 'bidding' || gs.turnIdx === null) return null;
+  const idx = gs.turnIdx;
+  const prev = previousBidderIdx(gs, ctx, idx);
+  if (prev === null || gs.bids[prev] === null) return null;
+
+  const target = ctx.players[prev];
+  const used = !!(gs.passBackUsed && gs.passBackUsed[idx]);
+  // Sending it back to someone who has dropped would just stall the table
+  // until their own timeout fires.
+  const unreachable = !target.isBot && !target.connected;
+
+  return {
+    toIdx: prev,
+    toName: target.name,
+    available: !used && !unreachable,
+    reason: used ? 'already-used' : unreachable ? 'disconnected' : null,
+  };
+}
+
+function applyPassBack(gs, ctx, idx) {
+  if (gs.phase !== 'bidding' || idx !== gs.turnIdx) return null;
+  const info = passBackInfo(gs, ctx);
+  if (!info) return 'There is no earlier bid to send back.';
+  if (info.reason === 'already-used') return 'You have already sent the bid back this round.';
+  if (info.reason === 'disconnected') return `${info.toName} is disconnected.`;
+
+  // One per seat per round, otherwise two players could bounce the turn
+  // between them indefinitely.
+  gs.passBackUsed[idx] = true;
+  gs.bids[info.toIdx] = null;
+  gs.turnIdx = info.toIdx;
+  return null;
+}
+
 // ---------- lifecycle ----------
 
 function createState(ctx) {
@@ -92,6 +142,7 @@ function startRound(gs, ctx) {
   gs.dealerIdx = (gs.round - 1) % n;
   gs.bids = Array(n).fill(null);
   gs.tricksWon = Array(n).fill(0);
+  gs.passBackUsed = Array(n).fill(false);
   gs.trick = [];
   gs.lastTrick = null;
   gs.playedCards = [];
@@ -187,6 +238,7 @@ function applyAction(gs, ctx, idx, action) {
   switch (action && action.type) {
     case 'bid': return applyBid(gs, ctx, idx, Number(action.bid));
     case 'play': return applyPlay(gs, ctx, idx, action.card);
+    case 'passBack': return applyPassBack(gs, ctx, idx);
     case 'nextRound':
       if (gs.phase !== 'roundEnd') return null;
       startRound(gs, ctx);
@@ -283,6 +335,7 @@ function viewFor(gs, ctx, idx) {
     turnIdx: gs.turnIdx,
     forbiddenBid:
       gs.phase === 'bidding' && gs.turnIdx !== null ? forbiddenLastBid(gs, gs.turnIdx) : null,
+    passBack: passBackInfo(gs, ctx),
     opponentHands: player && player.isDev && gs.hands.length ? gs.hands : null,
   };
 }
@@ -307,6 +360,7 @@ function lobbyView() {
     lastTrick: null,
     turnIdx: null,
     forbiddenBid: null,
+    passBack: null,
     opponentHands: null,
   };
 }

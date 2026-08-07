@@ -207,6 +207,60 @@
     }
   }
 
+  // ---------- auto-move countdown ----------
+  // The server sends the time remaining, not a timestamp, so a client with a
+  // skewed clock still counts down correctly. We turn it into a local deadline
+  // on arrival and tick from there.
+  var autoMoveDeadline = null;
+  var countdownTimer = null;
+  var COUNTDOWN_VISIBLE_MS = 30000; // only warn during the final stretch
+
+  function noteAutoMove(ms) {
+    autoMoveDeadline = typeof ms === 'number' ? Date.now() + ms : null;
+    if (!countdownTimer) countdownTimer = setInterval(paintCountdown, 500);
+    paintCountdown();
+  }
+
+  // Browsers throttle timers in a backgrounded tab, so the countdown can be
+  // stale the instant a player switches back. Repaint immediately on return
+  // rather than leaving a wrong number on screen for up to half a second.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) paintCountdown();
+  });
+
+  function countdownText() {
+    if (autoMoveDeadline === null) return null;
+    var left = autoMoveDeadline - Date.now();
+    if (left > COUNTDOWN_VISIBLE_MS || left < 0) return null;
+    return String(Math.ceil(left / 1000)) + 's';
+  }
+
+  // Repaints just the countdown chips between state updates.
+  function paintCountdown() {
+    var text = countdownText();
+
+    var mine = document.getElementById('my-countdown');
+    if (mine) {
+      var isMyTurn = state && state.turnIdx === state.youIdx &&
+        (state.phase === 'bidding' || state.phase === 'playing');
+      if (text && isMyTurn) { mine.textContent = text; mine.classList.remove('hidden'); }
+      else mine.classList.add('hidden');
+    }
+
+    var seatChip = el.tableArea && el.tableArea.querySelector('.seat.active .seat-countdown');
+    if (seatChip) {
+      if (text) { seatChip.textContent = text; seatChip.classList.remove('hidden'); }
+      else seatChip.classList.add('hidden');
+    }
+
+    var bidChip = document.getElementById('bid-countdown');
+    if (bidChip) {
+      var bidding = state && state.phase === 'bidding' && state.turnIdx === state.youIdx;
+      if (text && bidding) { bidChip.textContent = 'Auto-bid in ' + text; bidChip.classList.remove('hidden'); }
+      else bidChip.classList.add('hidden');
+    }
+  }
+
   function onState(newState) {
     var trickCompleted = false;
     var lastTrickKey = null;
@@ -222,6 +276,7 @@
 
     prevState = state;
     state = newState;
+    noteAutoMove(newState.autoMoveInMs);
 
     if (newState.youId && newState.code) {
       saveSession(newState.youId, newState.code, (el.inputName && el.inputName.value) || '');
@@ -464,6 +519,11 @@
       seat.appendChild(divider);
       seat.appendChild(bidDiv);
       seat.appendChild(countDiv);
+
+      // Filled in by paintCountdown between state updates.
+      var seatCountdown = document.createElement('span');
+      seatCountdown.className = 'seat-countdown hidden';
+      seat.appendChild(seatCountdown);
 
       seat.dataset.idx = String(idx);
       seat.addEventListener('click', function () {
@@ -719,6 +779,12 @@
     var show = state.phase === 'bidding' && state.turnIdx === state.youIdx;
     if (!show) {
       el.bidOverlay.classList.add('hidden');
+      // Clear the countdown and pass-back offer too, so a reopened overlay
+      // never flashes the previous turn's content before its first repaint.
+      var staleCountdown = document.getElementById('bid-countdown');
+      if (staleCountdown) { staleCountdown.textContent = ''; staleCountdown.classList.add('hidden'); }
+      var stalePassBack = document.getElementById('bid-passback');
+      if (stalePassBack) { stalePassBack.innerHTML = ''; stalePassBack.classList.add('hidden'); }
       return;
     }
     el.bidOverlay.classList.remove('hidden');
@@ -756,6 +822,38 @@
         el.bidButtons.appendChild(btn);
       })(b);
     }
+
+    renderPassBack();
+  }
+
+  // Offer to hand the turn back to the player who bid just before you, so they
+  // can change a bid they regret.
+  function renderPassBack() {
+    var host = document.getElementById('bid-passback');
+    if (!host) return;
+    host.innerHTML = '';
+    var pb = state.passBack;
+    if (!pb) { host.classList.add('hidden'); return; }
+    host.classList.remove('hidden');
+
+    if (!pb.available) {
+      var note = document.createElement('div');
+      note.className = 'passback-note';
+      note.textContent = pb.reason === 'already-used'
+        ? 'You have already sent the bid back this round.'
+        : pb.toName + ' is disconnected.';
+      host.appendChild(note);
+      return;
+    }
+
+    var btn = document.createElement('button');
+    btn.className = 'btn btn-secondary passback-btn';
+    btn.textContent = '↩ Let ' + pb.toName + ' re-bid';
+    btn.title = 'Send the turn back to ' + pb.toName + ' so they can change their bid';
+    btn.addEventListener('click', function () {
+      send({ type: 'passBack' });
+    });
+    host.appendChild(btn);
   }
 
   function renderScoreOverlay() {

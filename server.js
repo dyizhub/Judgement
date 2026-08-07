@@ -130,8 +130,10 @@ function createRoom() {
     turnIdx: null,
     trickLeaderIdx: null,
     playedCards: [],
+    passBackUsed: [],
     botTimer: null,
     turnTimer: null,
+    turnDeadline: null,
     lastActivity: Date.now(),
   };
   rooms.set(room.code, room);
@@ -150,9 +152,12 @@ function send(ws, type, payload = {}) {
 
 function broadcastState(room) {
   room.lastActivity = Date.now();
-  for (const p of room.players) if (!p.isBot) sendState(room, p);
+  // Timers first: scheduleTurnTimeout sets room.turnDeadline, which the state
+  // below carries so clients can show a countdown. Sending first would ship
+  // the previous turn's deadline.
   scheduleBot(room);
   scheduleTurnTimeout(room);
+  for (const p of room.players) if (!p.isBot) sendState(room, p);
 }
 
 function sendState(room, player) {
@@ -183,6 +188,13 @@ function sendState(room, player) {
       turnIdx: room.turnIdx,
       forbiddenBid: room.phase === 'bidding' && room.turnIdx !== null
         ? forbiddenLastBid(room, room.turnIdx) : null,
+      // Time left before the server plays for whoever is on turn. Sent as a
+      // duration rather than a timestamp so a client whose clock is off still
+      // counts down correctly.
+      autoMoveInMs: room.turnDeadline ? Math.max(0, room.turnDeadline - Date.now()) : null,
+      // Whether the player on turn may hand the bid back to the seat before
+      // them, and who that is — so the button can name them.
+      passBack: passBackInfo(room),
       // Dev mode: every player's hand, sent only to the dev player themself.
       // A non-dev client gets no field at all here — nothing to detect,
       // let alone reveal, even by inspecting network traffic.
@@ -198,6 +210,7 @@ function startRound(room) {
   room.dealerIdx = (room.round - 1) % n;
   room.bids = Array(n).fill(null);
   room.tricksWon = Array(n).fill(0);
+  room.passBackUsed = Array(n).fill(false);
   room.trick = [];
   room.lastTrick = null;
   room.playedCards = [];
@@ -250,6 +263,56 @@ function applyBid(room, idx, bid) {
   } else {
     room.turnIdx = (idx + 1) % n;
   }
+  broadcastState(room);
+  return null;
+}
+
+// ---------- handing the bid back ----------
+// Bidding goes round in order, so the seat immediately before you is the one
+// who just bid. If they called something they regret, the player on turn can
+// hand the turn back so they can re-bid.
+
+function previousBidderIdx(room, idx) {
+  const n = room.players.length;
+  const firstBidder = (room.dealerIdx + 1) % n;
+  if (idx === firstBidder) return null; // nobody has bid before you this round
+  return (idx - 1 + n) % n;
+}
+
+// Why the player on turn may or may not send the bid back. Returned in state so
+// the client can show (or explain) the button without duplicating the rules.
+function passBackInfo(room) {
+  if (room.phase !== 'bidding' || room.turnIdx === null) return null;
+  const idx = room.turnIdx;
+  const prev = previousBidderIdx(room, idx);
+  if (prev === null || room.bids[prev] === null) return null;
+
+  const target = room.players[prev];
+  const used = !!(room.passBackUsed && room.passBackUsed[idx]);
+  // Sending it back to someone who has dropped would just stall the table
+  // until their own timeout fires.
+  const unreachable = !target.isBot && !target.connected;
+
+  return {
+    toIdx: prev,
+    toName: target.name,
+    available: !used && !unreachable,
+    reason: used ? 'already-used' : unreachable ? 'disconnected' : null,
+  };
+}
+
+function applyPassBack(room, idx) {
+  if (room.phase !== 'bidding' || idx !== room.turnIdx) return null;
+  const info = passBackInfo(room);
+  if (!info) return 'There is no earlier bid to send back.';
+  if (info.reason === 'already-used') return 'You have already sent the bid back this round.';
+  if (info.reason === 'disconnected') return `${info.toName} is disconnected.`;
+
+  // One per seat per round, otherwise two players could bounce the turn
+  // between them indefinitely.
+  room.passBackUsed[idx] = true;
+  room.bids[info.toIdx] = null;
+  room.turnIdx = info.toIdx;
   broadcastState(room);
   return null;
 }
@@ -317,14 +380,29 @@ function autoAct(room, idx) {
 // hang forever — on their turn, or (as host) at the round-end scoreboard where
 // advancing is a manual click. A vanished (disconnected) player gets a short
 // reconnect grace; a present but idle one gets a longer courtesy window.
-const TURN_TIMEOUT_CONNECTED_MS = Number(process.env.TURN_TIMEOUT_CONNECTED_MS) || 90 * 1000;
-const TURN_TIMEOUT_DISCONNECTED_MS = Number(process.env.TURN_TIMEOUT_DISCONNECTED_MS) || 12 * 1000;
+// No default is ever shorter than this: the old 12s gave someone who dropped
+// for a moment no realistic chance to get back before their turn was played
+// for them.
+const MIN_TIMEOUT_MS = 30 * 1000;
+
+// An explicitly-set env var is taken literally so tests can run in
+// milliseconds; only the built-in defaults get the 30s floor.
+function timeoutMs(envName, defaultMs) {
+  const raw = Number(process.env[envName]);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return Math.max(MIN_TIMEOUT_MS, defaultMs);
+}
+
+const TURN_TIMEOUT_CONNECTED_MS = timeoutMs('TURN_TIMEOUT_CONNECTED_MS', 90 * 1000);
+const TURN_TIMEOUT_DISCONNECTED_MS = timeoutMs('TURN_TIMEOUT_DISCONNECTED_MS', 30 * 1000);
 // Round-end grace is longer for a present host so the table can read scores.
-const ROUNDEND_TIMEOUT_CONNECTED_MS = Number(process.env.ROUNDEND_TIMEOUT_CONNECTED_MS) || 120 * 1000;
-const ROUNDEND_TIMEOUT_DISCONNECTED_MS = Number(process.env.ROUNDEND_TIMEOUT_DISCONNECTED_MS) || 15 * 1000;
+const ROUNDEND_TIMEOUT_CONNECTED_MS = timeoutMs('ROUNDEND_TIMEOUT_CONNECTED_MS', 120 * 1000);
+const ROUNDEND_TIMEOUT_DISCONNECTED_MS = timeoutMs('ROUNDEND_TIMEOUT_DISCONNECTED_MS', 30 * 1000);
 
 function scheduleTurnTimeout(room) {
   if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  // Deadline the clients count down against; null whenever nothing is pending.
+  room.turnDeadline = null;
   if (process.env.NO_TURN_TIMEOUT) return; // disable for deterministic tests
 
   // Round-end: host normally advances manually so everyone can read the
@@ -333,6 +411,7 @@ function scheduleTurnTimeout(room) {
     const host = room.players.find(p => p.id === room.hostId);
     const delay = host && host.connected
       ? ROUNDEND_TIMEOUT_CONNECTED_MS : ROUNDEND_TIMEOUT_DISCONNECTED_MS;
+    room.turnDeadline = Date.now() + delay;
     room.turnTimer = setTimeout(() => {
       room.turnTimer = null;
       if (room.phase === 'roundEnd') startRound(room);
@@ -346,6 +425,7 @@ function scheduleTurnTimeout(room) {
   if (!p || p.isBot) return; // bots are handled by scheduleBot
   const delay = p.connected ? TURN_TIMEOUT_CONNECTED_MS : TURN_TIMEOUT_DISCONNECTED_MS;
   const turnAtSchedule = room.turnIdx;
+  room.turnDeadline = Date.now() + delay;
   room.turnTimer = setTimeout(() => {
     room.turnTimer = null;
     if (room.turnIdx !== turnAtSchedule) return; // already moved on
@@ -490,6 +570,13 @@ function handleMessage(ws, msg) {
   if (type === 'play') {
     if (idx !== room.turnIdx) return;
     const err = applyPlay(room, idx, msg.card);
+    if (err) send(ws, 'error', { message: err });
+    return;
+  }
+
+  if (type === 'passBack') {
+    if (idx !== room.turnIdx) return;
+    const err = applyPassBack(room, idx);
     if (err) send(ws, 'error', { message: err });
     return;
   }
